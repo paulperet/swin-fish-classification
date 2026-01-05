@@ -1,17 +1,19 @@
-import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import DataLoader
 from torchmetrics import Accuracy
 import torch.optim as optim
 import torch.nn as nn
+from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
+import argparse
+from pathlib import Path
 
 # Import custom modules
 from model import load_model
-from dataset import ImageFolderCustom, find_classes, idx_to_label, prediction_to_idx
+from dataset import ImageFolderCustom
 from transforms import train_transform, test_transform
 
-if __name__ == "__main__":
+def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_backbone=50, batch_size=256, num_workers=4):
     # Set device
     device = torch.device("cpu")
     if torch.cuda.is_available():
@@ -24,13 +26,25 @@ if __name__ == "__main__":
     test_classification = ImageFolderCustom("./data/classification_test.csv", transform=test_transform)
     val_classification = ImageFolderCustom("./data/classification_val.csv", transform=test_transform)
 
-    dataloader_train = DataLoader(train_classification, batch_size=512, shuffle=True, num_workers=16, pin_memory=True, persistent_workers=True)
-    dataloader_test = DataLoader(test_classification, batch_size=512, shuffle=False, num_workers=16, pin_memory=True, persistent_workers=True)
-    dataloader_val = DataLoader(val_classification, batch_size=512, shuffle=False, num_workers=16, pin_memory=True, persistent_workers=True)
+    dataloader_train = DataLoader(train_classification, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=True)
+    dataloader_test = DataLoader(test_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=True)
+    dataloader_val = DataLoader(val_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=True)
 
     # Load model
     model = load_model(train_classification.classes_to_idx)
     model = model.to(device)
+
+    # Freeze only the backbone (not the head)
+    for name, param in model.named_parameters():
+        if not name.startswith('head'):
+            param.requires_grad = False
+
+    # Data parallelism if multiple GPUs are available
+    if nn.DataParallel and torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)
+
+    # Get number of classes
+    num_classes = len(train_classification.classes_to_idx)
 
     # Define loss function
     class_weights = torch.tensor([i[1] for i in sorted(train_classification.classes_weights.items())], dtype=torch.float32, device=device)
@@ -43,13 +57,24 @@ if __name__ == "__main__":
     scaler = torch.amp.GradScaler(enabled=use_amp)
     optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.05)
 
+    # Load checkpoint if provided
+    if checkpoint_path:
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint['model'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        scaler.load_state_dict(checkpoint['scaler'])
+    else:
+        current_epoch_head = 0
+        current_epoch_backbone = 0
+
     # Torchmetrics metric
     train_accuracy = Accuracy(task="multiclass", num_classes=num_classes).to(device)
     val_accuracy = Accuracy(task="multiclass", num_classes=num_classes).to(device)
 
     best_val_acc = 0.0
 
-    for epoch in range(30):  # loop over the dataset multiple times
+    # 1. Training loop - Head
+    for epoch in range(current_epoch_head, epochs_head):  # loop over the dataset multiple times
 
         # switch model to training mode
         model.train()
@@ -62,9 +87,6 @@ if __name__ == "__main__":
             inputs = inputs.to(device)
             labels = labels.to(device)
 
-            # zero the parameter gradients
-            optimizer.zero_grad()
-
             # forward + backward + optimize
             with torch.autocast(device_type=device, dtype=torch.float16, enabled=use_amp):
                 outputs = model(inputs)
@@ -72,6 +94,9 @@ if __name__ == "__main__":
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
+
+            # zero the parameter gradients
+            optimizer.zero_grad(set_to_none=True)
 
             # print statistics
             running_loss += loss.item()
@@ -107,7 +132,9 @@ if __name__ == "__main__":
                 "optimizer": optimizer.state_dict(),
                 "scaler": scaler.state_dict(),
                 "epoch": epoch,
-                "val_acc": val_total_accuracy
+                "val_acc": val_total_accuracy,
+                "epochs_head": epochs_head,
+                "epochs_backbone": epochs_backbone
             }
             torch.save(checkpoint, "checkpoint_start_best.tar")
 
@@ -118,3 +145,172 @@ if __name__ == "__main__":
         val_accuracy.reset()
 
     print('Finished Training')
+
+    # 2. Training loop - Backbone
+    # Unfreeze the backbone and norm layers
+
+    for param in model.features.parameters():
+        param.requires_grad = True
+
+    for param in model.norm.parameters():
+        param.requires_grad = True
+    
+    # Use different learning rates for different parts of the model to avoid catastrophic forgetting
+
+    use_amp = True
+    scaler = torch.amp.GradScaler(enabled=use_amp)
+    optimizer = optim.AdamW([
+        {'params': model.features.parameters(), 'lr': 1e-6, 'weight_decay': 0.05},  # Very low LR for backbone
+        {'params': model.norm.parameters(), 'lr': 5e-6, 'weight_decay': 0.05},      # Slightly higher for norm
+        {'params': model.head.parameters(), 'lr': 1e-4, 'weight_decay': 0.01}       # Highest LR for head
+    ])
+
+    # Warmup for first 2 epochs, then cosine annealing
+    warmup_scheduler = LinearLR(optimizer, start_factor=0.1, total_iters=2)
+    main_scheduler = CosineAnnealingLR(optimizer, T_max=23, eta_min=1e-7)
+    scheduler = SequentialLR(optimizer, schedulers=[warmup_scheduler, main_scheduler], milestones=[2])
+
+    start_epoch = 0
+    
+    # Torchmetrics metric
+    train_accuracy = Accuracy(task="multiclass", num_classes=num_classes).to(device)
+    val_accuracy = Accuracy(task="multiclass", num_classes=num_classes).to(device)
+
+
+    # Add gradient clipping
+    max_grad_norm = 1.0
+
+    # Track best test accuracy
+    best_test_acc = 0.0
+
+    for epoch in range(current_epoch_backbone, epochs_backbone):  # loop over the dataset multiple times
+
+        # switch model to training mode
+        model.train()
+
+        running_loss = 0.0
+        for i, data in enumerate(dataloader_train, 0):
+
+            # get the inputs; data is a list of [inputs, labels]
+            inputs, labels = data
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+
+            # zero the parameter gradients
+            optimizer.zero_grad()
+
+            # forward + backward + optimize
+            with torch.autocast(device_type=device, dtype=torch.float16, enabled=use_amp):
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+            scaler.scale(loss).backward()
+
+            # Gradient clipping
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+
+            scaler.step(optimizer)
+            scaler.update()
+
+            # print statistics
+            running_loss += loss.item()
+
+        # Step the scheduler
+        scheduler.step()
+
+        # Switch model to evaluation
+        model.eval()
+
+        # Training accuracy calculation
+        with torch.no_grad():
+            for images, labels in dataloader_train:
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
+                preds = torch.argmax(outputs, dim=1)
+                train_accuracy.update(preds, labels)
+
+        # Validation accuracy calculation
+        with torch.no_grad():
+            for images, labels in dataloader_val:
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
+                preds = torch.argmax(outputs, dim=1)
+                val_accuracy.update(preds, labels)
+
+        # Compute total for each accuracy
+        train_total_accuracy = train_accuracy.compute()
+        val_total_accuracy = val_accuracy.compute()
+
+        # Save checkpoint if validation accuracy improves
+        if epoch == 0 or val_total_accuracy > best_val_acc:
+            best_val_acc = val_total_accuracy
+            checkpoint = {
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scaler": scaler.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "epoch": epoch,
+                "val_acc": val_total_accuracy,
+                "epochs_head": epochs_head,
+                "epochs_backbone": epochs_backbone
+            }
+            torch.save(checkpoint, "checkpoint_full_best.tar")
+
+        print(f'Epoch: {epoch + 1} loss: {running_loss / len(dataloader_train):.3f} Training Acc: {train_total_accuracy} Validation Acc: {val_total_accuracy}')
+        running_loss = 0.0
+        train_accuracy.reset()
+        val_accuracy.reset()
+
+    print('Finished Training')
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--output-file",
+        type=Path,
+        default=Path("word2vec_model.pt"),
+        help="Path to the target model file. (.pt)",
+    )
+
+    parser.add_argument(
+        "--epochs-head",
+        type=int,
+        required=True,
+        help="Number of training epoch for the head.",
+    )
+
+    parser.add_argument(
+        "--epochs-backbone",
+        type=int,
+        required=True,
+        help="Number of training epoch for the backbone.",
+    )
+
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=256,
+        help="Batch size for training. (default: 256)",
+    )
+
+    parser.add_argument(
+        "--checkpoint-path",
+        type=Path,
+        default=None,
+        help="Path to load the checkpoint. (default: None)",
+    )
+
+    args = parser.parse_args()
+    return args
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    train(
+        output_path=args.output_file,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        checkpoint=args.checkpoint_path,
+        num_workers=args.num_workers,
+    )

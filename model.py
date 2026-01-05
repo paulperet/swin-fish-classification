@@ -11,7 +11,7 @@ def load_model(number_classes):
     # Get the number of input features from the original head
     num_features = swin_t_model.head.in_features
 
-    # Additional linear layer and dropout layer on top of the original head
+    # Additional linear layer and dropout layer on top of the original head for classification
     swin_t_model.head = nn.Sequential(
         nn.Linear(num_features, 256),
         nn.ReLU(inplace=True),
