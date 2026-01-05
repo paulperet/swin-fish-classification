@@ -23,12 +23,16 @@ def prediction_to_idx(probabilities):
     return best_prediction.item()
 
 class ImageFolderCustom(Dataset):
-    def __init__(self, targ_dir: str, transform=None, cutoff=50):
+    def __init__(self, targ_dir: str, transform=None, cutoff=50, upper_bound=None):
         
-        # Get classes >50 in train
+        # Get classes >cutoff in train
         train_most_represented = pd.read_csv('./data/classification_train.csv')
         counts = train_most_represented['standardized_species'].value_counts()
-        classes_most_represented = train_most_represented[train_most_represented['standardized_species'].map(counts) >= cutoff]['standardized_species'].unique()
+
+        if upper_bound != None:
+            classes_most_represented = train_most_represented[(train_most_represented['standardized_species'].map(counts) >= cutoff) & (train_most_represented['standardized_species'].map(counts) <= upper_bound)]['standardized_species'].unique()
+        else:
+            classes_most_represented = train_most_represented[train_most_represented['standardized_species'].map(counts) >= cutoff]['standardized_species'].unique()
 
         # Filter from these classes
         df = pd.read_csv(targ_dir)
