@@ -13,7 +13,7 @@ from model import load_model
 from dataset import ImageFolderCustom
 from transforms import train_transform, test_transform
 
-def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_backbone=50, batch_size=256, num_workers=4):
+def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_backbone=50, batch_size=256, num_workers=4, cutoff=50):
     # Set device
     device = torch.device("cpu")
     if torch.cuda.is_available():
@@ -22,9 +22,9 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
         device = torch.device("mps")
 
     # Create datasets & dataloaders
-    train_classification = ImageFolderCustom("./data/classification_train.csv", transform=train_transform)
-    test_classification = ImageFolderCustom("./data/classification_test.csv", transform=test_transform)
-    val_classification = ImageFolderCustom("./data/classification_val.csv", transform=test_transform)
+    train_classification = ImageFolderCustom("./data/classification_train.csv", transform=train_transform, cutoff=cutoff)
+    test_classification = ImageFolderCustom("./data/classification_test.csv", transform=test_transform, cutoff=cutoff)
+    val_classification = ImageFolderCustom("./data/classification_val.csv", transform=test_transform, cutoff=cutoff)
 
     dataloader_train = DataLoader(train_classification, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=True)
     dataloader_test = DataLoader(test_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=True)
@@ -136,7 +136,7 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
                 "epochs_head": epochs_head,
                 "epochs_backbone": epochs_backbone
             }
-            torch.save(checkpoint, "checkpoint_start_best.tar")
+            torch.save(checkpoint, output_path)
 
 
         print(f'Epoch: {epoch + 1} loss: {running_loss / len(dataloader_train):.3f} Training Acc: {train_total_accuracy} Validation Acc: {val_total_accuracy}')
@@ -169,8 +169,6 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
     warmup_scheduler = LinearLR(optimizer, start_factor=0.1, total_iters=2)
     main_scheduler = CosineAnnealingLR(optimizer, T_max=23, eta_min=1e-7)
     scheduler = SequentialLR(optimizer, schedulers=[warmup_scheduler, main_scheduler], milestones=[2])
-
-    start_epoch = 0
     
     # Torchmetrics metric
     train_accuracy = Accuracy(task="multiclass", num_classes=num_classes).to(device)
@@ -180,8 +178,8 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
     # Add gradient clipping
     max_grad_norm = 1.0
 
-    # Track best test accuracy
-    best_test_acc = 0.0
+    # Track best validation accuracy
+    best_val_acc = 0.0
 
     for epoch in range(current_epoch_backbone, epochs_backbone):  # loop over the dataset multiple times
 
@@ -254,7 +252,7 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
                 "epochs_head": epochs_head,
                 "epochs_backbone": epochs_backbone
             }
-            torch.save(checkpoint, "checkpoint_full_best.tar")
+            torch.save(checkpoint, output_path)
 
         print(f'Epoch: {epoch + 1} loss: {running_loss / len(dataloader_train):.3f} Training Acc: {train_total_accuracy} Validation Acc: {val_total_accuracy}')
         running_loss = 0.0
@@ -299,6 +297,13 @@ def parse_args():
         type=Path,
         default=None,
         help="Path to load the checkpoint. (default: None)",
+    )
+
+    parser.add_argument(
+        "--cutoff",
+        type=int,
+        default=50,
+        help="Cutoff for class representation. (default: 50)",
     )
 
     args = parser.parse_args()
