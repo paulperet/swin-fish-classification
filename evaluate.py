@@ -46,7 +46,8 @@ def evaluate(checkpoint_path, batch_size=256, num_workers=4):
             train_accuracy_metric.update(outputs, labels)
 
     train_accuracy = train_accuracy_metric.compute()
-    print(f'Accuracy on train dataset: {train_accuracy:.2f}')
+    train_accuracy = train_accuracy * 100
+    print(f'Accuracy on train dataset: {train_accuracy:.2f}%')
     
     val_accuracy_metric = Accuracy(task="multiclass", num_classes=len(val_dataloader.dataset.classes_to_idx)).to(device)
     with torch.no_grad():
@@ -58,7 +59,8 @@ def evaluate(checkpoint_path, batch_size=256, num_workers=4):
             val_accuracy_metric.update(outputs, labels)
     
     val_accuracy = val_accuracy_metric.compute()
-    print(f'Accuracy on validation dataset: {val_accuracy:.2f}')
+    val_accuracy = val_accuracy * 100
+    print(f'Accuracy on validation dataset: {val_accuracy:.2f}%')
 
     test_accuracy_metric = Accuracy(task="multiclass", num_classes=len(test_dataloader.dataset.classes_to_idx)).to(device)
     with torch.no_grad():
@@ -70,7 +72,8 @@ def evaluate(checkpoint_path, batch_size=256, num_workers=4):
             test_accuracy_metric.update(outputs, labels)
 
     test_accuracy = test_accuracy_metric.compute()
-    print(f'Accuracy on test dataset: {test_accuracy:.2f}')
+    test_accuracy = test_accuracy * 100
+    print(f'Accuracy on test dataset: {test_accuracy:.2f}%\n')
 
 def parse_args():
     parser = argparse.ArgumentParser()
