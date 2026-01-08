@@ -26,7 +26,7 @@ class ImageFolderCustom(Dataset):
     def __init__(self, targ_dir: str, transform=None, cutoff=50, upper_bound=None):
         
         # Get classes >cutoff in train
-        train_most_represented = pd.read_csv('./data/classification_train.csv')
+        train_most_represented = pd.read_csv('./data/classification_train.csv', low_memory=False)
         counts = train_most_represented['standardized_species'].value_counts()
 
         if upper_bound != None:
@@ -35,7 +35,7 @@ class ImageFolderCustom(Dataset):
             classes_most_represented = train_most_represented[train_most_represented['standardized_species'].map(counts) >= cutoff]['standardized_species'].unique()
 
         # Filter from these classes
-        df = pd.read_csv(targ_dir)
+        df = pd.read_csv(targ_dir, low_memory=False)
         df = df[df['standardized_species'].isin(classes_most_represented)]
 
         images, labels = df['filename'], df['standardized_species']

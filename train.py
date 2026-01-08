@@ -15,11 +15,11 @@ from transforms import train_transform, test_transform
 
 def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_backbone=50, batch_size=256, num_workers=4, cutoff=50):
     # Set device
-    device = torch.device("cpu")
+    device = "cpu"
     if torch.cuda.is_available():
-        device = torch.device("cuda")
+        device = "cuda"
     elif torch.backends.mps.is_available():
-        device = torch.device("mps")
+        device = "mps"
 
     # Create datasets & dataloaders
     train_classification = ImageFolderCustom("./data/classification_train.csv", transform=train_transform, cutoff=cutoff)
@@ -267,7 +267,7 @@ def parse_args():
     parser.add_argument(
         "--output-file",
         type=Path,
-        default=Path("word2vec_model.pt"),
+        default=Path("swin_model.pt"),
         help="Path to the target model file. (.pt)",
     )
 
@@ -306,6 +306,13 @@ def parse_args():
         help="Cutoff for class representation. (default: 50)",
     )
 
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=4,
+        help="Number of workers for data loading. (default: 4)",
+    )
+
     args = parser.parse_args()
     return args
 
@@ -314,8 +321,10 @@ if __name__ == "__main__":
 
     train(
         output_path=args.output_file,
-        epochs=args.epochs,
+        epochs_head=args.epochs_head,
+        epochs_backbone=args.epochs_backbone,
+        cutoff=args.cutoff,
         batch_size=args.batch_size,
-        checkpoint=args.checkpoint_path,
+        checkpoint_path=args.checkpoint_path,
         num_workers=args.num_workers,
     )
