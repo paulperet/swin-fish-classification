@@ -77,7 +77,7 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
     print(f"Cutoff for classes: {cutoff}")
     print(f"Number of classes: {num_classes}")
     print(f"Number of training samples: {len(dataloader_train.dataset)}\n")
-    print("--- Starting Training ---\n")
+    print("--- Starting Training HEAD ---\n")
 
     # 1. Training loop - Head
     for epoch in range(current_epoch_head, epochs_head):  # loop over the dataset multiple times
@@ -139,7 +139,10 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
         print(f'Epoch: {epoch + 1} loss: {running_loss / len(dataloader_train):.3f} Validation Loss: {val_total_loss / len(dataloader_val):.3f}')
         running_loss = 0.0
 
-    print('Finished Training')
+    print('Finished Training HEAD\n')
+    print("--- Starting Training FULL ---\n")
+
+    torch.cuda.empty_cache()
 
     # 2. Training loop - Backbone
     # Unfreeze the backbone and norm layers
@@ -206,6 +209,8 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
         # Switch model to evaluation
         model.eval()
 
+        val_total_loss = 0.0
+
         # Validation loss calculation
         with torch.no_grad():
             for images, labels in dataloader_val:
@@ -233,7 +238,7 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
         print(f'Epoch: {epoch + 1} loss: {running_loss / len(dataloader_train):.3f} Validation Loss: {val_total_loss / len(dataloader_val):.3f}')
         running_loss = 0.0
 
-    print('Finished Training')
+    print('Finished Training FULL\n')
 
 def parse_args():
     parser = argparse.ArgumentParser()
