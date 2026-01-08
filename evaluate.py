@@ -33,7 +33,9 @@ def evaluate(checkpoint_path, batch_size=256, num_workers=4):
     model.to(device)
     model.eval()
 
-    train_accuracy_metric = Accuracy().to(device)
+    print("--- Evaluating Model ---\n")
+
+    train_accuracy_metric = Accuracy(task="multiclass", num_classes=len(train_dataloader.dataset.classes_to_idx)).to(device)
 
     with torch.no_grad():
         for images, labels in train_dataloader:
@@ -43,7 +45,7 @@ def evaluate(checkpoint_path, batch_size=256, num_workers=4):
             outputs = model(images)
             train_accuracy_metric.update(outputs, labels)
     
-    val_accuracy_metric = Accuracy().to(device)
+    val_accuracy_metric = Accuracy(task="multiclass", num_classes=len(val_dataloader.dataset.classes_to_idx)).to(device)
     with torch.no_grad():
         for images, labels in val_dataloader:
             images = images.to(device)
@@ -52,7 +54,7 @@ def evaluate(checkpoint_path, batch_size=256, num_workers=4):
             outputs = model(images)
             val_accuracy_metric.update(outputs, labels)
     
-    test_accuracy_metric = Accuracy().to(device)
+    test_accuracy_metric = Accuracy(task="multiclass", num_classes=len(test_dataloader.dataset.classes_to_idx)).to(device)
     with torch.no_grad():
         for images, labels in test_dataloader:
             images = images.to(device)
