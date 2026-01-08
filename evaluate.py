@@ -13,11 +13,13 @@ def evaluate(checkpoint_path, batch_size=256, num_workers=4):
         device = torch.device("cuda")
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
+    
+    cutoff = torch.load(checkpoint_path)["cutoff"]
 
     # Create test dataset & dataloader
-    train_dataset = ImageFolderCustom("./data/classification_train.csv", transform=test_transform, cutoff=50)
-    val_dataset = ImageFolderCustom("./data/classification_val.csv", transform=test_transform, cutoff=50)
-    test_dataset = ImageFolderCustom("./data/classification_test.csv", transform=test_transform, cutoff=50)
+    train_dataset = ImageFolderCustom("./data/classification_train.csv", transform=test_transform, cutoff=cutoff)
+    val_dataset = ImageFolderCustom("./data/classification_val.csv", transform=test_transform, cutoff=cutoff)
+    test_dataset = ImageFolderCustom("./data/classification_test.csv", transform=test_transform, cutoff=cutoff)
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=True)

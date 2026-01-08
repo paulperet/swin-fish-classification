@@ -130,7 +130,8 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
                 "epoch": epoch,
                 "val_loss": val_total_loss,
                 "epochs_head": epochs_head,
-                "epochs_backbone": epochs_backbone
+                "epochs_backbone": epochs_backbone,
+                "cutoff": cutoff
             }
             torch.save(checkpoint, output_path)
 
@@ -224,7 +225,8 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
                 "epoch": epoch,
                 "val_loss": val_total_loss / len(dataloader_val),
                 "epochs_head": epochs_head,
-                "epochs_backbone": epochs_backbone
+                "epochs_backbone": epochs_backbone,
+                "cutoff": cutoff
             }
             torch.save(checkpoint, output_path)
 
