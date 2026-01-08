@@ -67,3 +67,40 @@ def evaluate(checkpoint_path, batch_size=256, num_workers=4):
     print(f'Accuracy on validation dataset: {val_accuracy:.2f}%')
     test_accuracy = test_accuracy_metric.compute()
     print(f'Accuracy on test dataset: {test_accuracy:.2f}%')
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--checkpoint-path",
+        type=Path,
+        default="./swin_model_checkpoint.pt",
+        help="Path to the target model file. (.pt)",
+    )
+
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=256,
+        help="Batch size for data loading.",
+    )
+
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=4,
+        help="Number of workers for data loading.",
+    )
+
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    import argparse
+    from pathlib import Path
+
+    args = parse_args()
+    evaluate(
+        checkpoint_path=args.checkpoint_path,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+    )
