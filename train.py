@@ -63,15 +63,13 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         scaler.load_state_dict(checkpoint['scaler'])
+        current_epoch_head = checkpoint['epoch'] + 1
+        current_epoch_backbone = checkpoint['epoch'] + 1
+        best_val_loss = checkpoint['val_loss']
     else:
         current_epoch_head = 0
         current_epoch_backbone = 0
-
-    # Torchmetrics metric
-    train_accuracy = Accuracy(task="multiclass", num_classes=num_classes).to(device)
-    val_accuracy = Accuracy(task="multiclass", num_classes=num_classes).to(device)
-
-    best_val_acc = 0.0
+        best_val_loss = float('inf')
 
     # Print training info
     print("--- Training Info ---")
@@ -112,45 +110,33 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
         # Switch model to evaluation
         model.eval()
 
-        # Training accuracy calculation
-        with torch.no_grad():
-            for images, labels in dataloader_train:
-                images, labels = images.to(device), labels.to(device)
-                outputs = model(images)
-                preds = torch.argmax(outputs, dim=1)
-                train_accuracy.update(preds, labels)
+        val_total_loss = 0.0
 
-        # Validation accuracy calculation
+        # Validation loss calculation
         with torch.no_grad():
             for images, labels in dataloader_val:
                 images, labels = images.to(device), labels.to(device)
                 outputs = model(images)
-                preds = torch.argmax(outputs, dim=1)
-                val_accuracy.update(preds, labels)
-
-        # Compute total for each accuracy
-        train_total_accuracy = train_accuracy.compute()
-        val_total_accuracy = val_accuracy.compute()
+                loss = criterion(outputs, labels)
+                val_total_loss += loss.item()
 
         # Save checkpoint if validation accuracy improves
-        if epoch == 0 or val_total_accuracy > best_val_acc:
-            best_val_acc = val_total_accuracy
+        if epoch == 0 or val_total_loss < best_val_loss:
+            best_val_loss = val_total_loss
             checkpoint = {
                 "model": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 "scaler": scaler.state_dict(),
                 "epoch": epoch,
-                "val_acc": val_total_accuracy,
+                "val_loss": val_total_loss,
                 "epochs_head": epochs_head,
                 "epochs_backbone": epochs_backbone
             }
             torch.save(checkpoint, output_path)
 
 
-        print(f'Epoch: {epoch + 1} loss: {running_loss / len(dataloader_train):.3f} Training Acc: {train_total_accuracy} Validation Acc: {val_total_accuracy}')
+        print(f'Epoch: {epoch + 1} loss: {running_loss / len(dataloader_train):.3f} Validation Loss: {val_total_loss / len(dataloader_val):.3f}')
         running_loss = 0.0
-        train_accuracy.reset()
-        val_accuracy.reset()
 
     print('Finished Training')
 
@@ -175,19 +161,11 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
 
     # Warmup for first 2 epochs, then cosine annealing
     warmup_scheduler = LinearLR(optimizer, start_factor=0.1, total_iters=2)
-    main_scheduler = CosineAnnealingLR(optimizer, T_max=23, eta_min=1e-7)
+    main_scheduler = CosineAnnealingLR(optimizer, T_max=epochs_backbone-2, eta_min=1e-7)
     scheduler = SequentialLR(optimizer, schedulers=[warmup_scheduler, main_scheduler], milestones=[2])
-    
-    # Torchmetrics metric
-    train_accuracy = Accuracy(task="multiclass", num_classes=num_classes).to(device)
-    val_accuracy = Accuracy(task="multiclass", num_classes=num_classes).to(device)
-
 
     # Add gradient clipping
     max_grad_norm = 1.0
-
-    # Track best validation accuracy
-    best_val_acc = 0.0
 
     for epoch in range(current_epoch_backbone, epochs_backbone):  # loop over the dataset multiple times
 
@@ -202,9 +180,6 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
             inputs = inputs.to(device)
             labels = labels.to(device)
 
-            # zero the parameter gradients
-            optimizer.zero_grad()
-
             # forward + backward + optimize
             with torch.autocast(device_type=device, dtype=torch.float16, enabled=use_amp):
                 outputs = model(inputs)
@@ -218,6 +193,9 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
             scaler.step(optimizer)
             scaler.update()
 
+            # zero the parameter gradients
+            optimizer.zero_grad(set_to_none=True)
+
             # print statistics
             running_loss += loss.item()
 
@@ -227,45 +205,31 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
         # Switch model to evaluation
         model.eval()
 
-        # Training accuracy calculation
-        with torch.no_grad():
-            for images, labels in dataloader_train:
-                images, labels = images.to(device), labels.to(device)
-                outputs = model(images)
-                preds = torch.argmax(outputs, dim=1)
-                train_accuracy.update(preds, labels)
-
-        # Validation accuracy calculation
+        # Validation loss calculation
         with torch.no_grad():
             for images, labels in dataloader_val:
                 images, labels = images.to(device), labels.to(device)
                 outputs = model(images)
-                preds = torch.argmax(outputs, dim=1)
-                val_accuracy.update(preds, labels)
-
-        # Compute total for each accuracy
-        train_total_accuracy = train_accuracy.compute()
-        val_total_accuracy = val_accuracy.compute()
-
+                loss = criterion(outputs, labels)
+                val_total_loss += loss.item()
+        
         # Save checkpoint if validation accuracy improves
-        if epoch == 0 or val_total_accuracy > best_val_acc:
-            best_val_acc = val_total_accuracy
+        if epoch == 0 or val_total_loss < best_val_loss:
+            best_val_loss = val_total_loss
             checkpoint = {
                 "model": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 "scaler": scaler.state_dict(),
                 "scheduler": scheduler.state_dict(),
                 "epoch": epoch,
-                "val_acc": val_total_accuracy,
+                "val_loss": val_total_loss / len(dataloader_val),
                 "epochs_head": epochs_head,
                 "epochs_backbone": epochs_backbone
             }
             torch.save(checkpoint, output_path)
 
-        print(f'Epoch: {epoch + 1} loss: {running_loss / len(dataloader_train):.3f} Training Acc: {train_total_accuracy} Validation Acc: {val_total_accuracy}')
+        print(f'Epoch: {epoch + 1} loss: {running_loss / len(dataloader_train):.3f} Validation Loss: {val_total_loss / len(dataloader_val):.3f}')
         running_loss = 0.0
-        train_accuracy.reset()
-        val_accuracy.reset()
 
     print('Finished Training')
 
