@@ -73,6 +73,14 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
 
     best_val_acc = 0.0
 
+    # Print training info
+    print("--- Training Info ---")
+    print(f"Device used: {device}")
+    print(f"Cutoff for classes: {cutoff}")
+    print(f"Number of classes: {num_classes}")
+    print(f"Number of training samples: {len(dataloader_train.dataset)}\n")
+    print("--- Starting Training ---\n")
+
     # 1. Training loop - Head
     for epoch in range(current_epoch_head, epochs_head):  # loop over the dataset multiple times
 
