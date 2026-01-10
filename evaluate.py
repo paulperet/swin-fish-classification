@@ -27,9 +27,12 @@ def evaluate(checkpoint_path, batch_size=256, num_workers=4):
 
     # Load model
     checkpoint = torch.load(checkpoint_path, map_location=device)
-
+    state_dict = checkpoint['model']
+    if list(state_dict.keys())[0].startswith('module.'):
+        state_dict = {k.replace('module.', '', 1): v for k, v in state_dict.items()}
+    
     model = load_model(train_dataloader.dataset.classes_to_idx)
-    model.load_state_dict(checkpoint['model'])
+    model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
 
