@@ -1,6 +1,6 @@
 # Swin Transformer for Fish Species Classification
 
-The goal of this project is to apply an image classification task using a State-of-the-art vision transformer model with the extra challenge of mitigating the issues related to the nature
+The goal of this project is to apply an image classification task using a state-of-the-art vision transformer model with the extra challenge of mitigating the issues related to the nature
 of the chosen dataset (fish-vista) which happens to contains a lot of data: 60k+ images and large imbalances with minority classes that can go as low as 2 examples per class and
 majority classes can be represented as high as 1500 on the training set.
 
@@ -12,11 +12,11 @@ majority classes can be represented as high as 1500 on the training set.
 
 The dataset consists of 69k images of fishes from 1758 unique species that are spread accross the training, validation and test set. Each of these dataset consists of a single csv file with a column corresponding to the fish species and another column corresponding to the name of the image file. There is also informations to build trait identification and segmentation models but we will not use it for this particular project.
 
-An example of two randomly sampled images from the dataset:
+Two randomly sampled images from the dataset:
 
 <img width="1372" height="430" alt="image" src="https://github.com/user-attachments/assets/2e39ac5a-18c3-4f53-ae9a-27e5c14e0f8d" />
 
-### Issues
+### Challenge
 The dataset suffers from a severe class imbalance. We can visualize it using the Lorenz curve (Gini values close to 0 signals equality while values close to 1 signals unequality). Only a small subset of these species contains a sufficient number of training examples to build an accurate model.
 I choose to keep only the species that have 50 examples or more in the training data which greatly reduces the number of classes down to 85.
 
@@ -39,7 +39,7 @@ I have decided to go with the weighted cross-entropy loss for this project. The 
 
 $$w_i = \frac{N}{n_i \cdot C}$$
 
-Where $w_i$ corresponds to the weight for class $i$, $N$ is the total number of samples, $n_i$ is the number of samples in class $i$v and $C$ is the total number of unique classes
+Where $w_i$ corresponds to the weight for class $i$, $N$ is the total number of samples, $n_i$ is the number of samples in class $i$, and $C$ is the total number of unique classes
 
 ### Fine-Tuning a pretrained model
 Starting from an already trained model as many benefits especially for computer vision. Indeed, we can expect that the pretrained network will have learned how to distinguish common features found in nature for example. Fine tuning will make the learning way faster, usually having a good accuracy from the first epochs and being better than random initialization [1].
