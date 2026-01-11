@@ -22,3 +22,27 @@ I choose to keep only the species that have 50 examples or more in the training 
 
 <img width="691" height="547" alt="image" src="https://github.com/user-attachments/assets/1b3a5165-04bc-46ba-9493-d6a9e28284aa" />
 
+## Mitigating class imbalance
+The main goal of this project was to research and find techniques that would allows our vision transformer to learn on a massive imbalanced dataset.
+
+### Data Preprocessing & Augmentation
+Following the recommendation of the original paper, I used a resizing technique that preserve the aspect ratio of the images so that the network can capture and discriminate each species on its proportions. It also come with the added benefit for our trained network to be used / fine tuned as a base model for another task such as trait segmentation, which is available with this dataset (Although the masks are only a subset of the entire fish dataset).
+
+The augmentation used are random horizontal flips, random vertical flips, random rotations, color jittering and randomly adjusting the sharpness. They synthetically increase the number of unique examples, help the network avoid overfitting and assure that it truly learn each species features.
+
+### Weighted Cross Entropy Loss
+The issue with data that is imbalanced is that the network will learn on this distribution and pay more attention to the majority classes, in some case leading to a great overall accuracy that does not represent the true quality of our classifier.
+There are two main ways to compensate for that:
+- Using a weighted loss function
+- Using a weighted random sampler
+I have decided to go with the weighted cross-entropy loss for this project. The weights for my classes are calculated as:
+
+$$w_i = \frac{N}{n_i \cdot C}$$
+
+Where $w_i$ corresponds to the weight for class $i$, $N$ is the total number of samples, $n_i$ is the number of samples in class $i$v and $C$ is the total number of unique classes
+
+### Fine-Tuning a pretrained model
+Starting from an already trained model as many benefits especially for computer vision. Indeed, we can expect that the pretrained network will have learned how to distinguish common features found in nature for example. Fine tuning will make the learning way faster, usually having a good accuracy from the first epochs and being better than random initialization [1].
+
+[1] "All pre-training methods notably outperform random initialization. However, we
+observe a considerably larger improvement under class imbalanced scenarios, where models pretrained on larger datasets yield greater boosts in accuracy." Ravid Shwartz-Ziv, Micah Goldblum, Yucen Lily Li, C. Bayan Bruss, & Andrew Gordon Wilson. (2023). Simplifying Neural Network Training Under Class Imbalance.
