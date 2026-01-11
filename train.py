@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 from torchmetrics import Accuracy
 import torch.optim as optim
 import torch.nn as nn
-from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR, ReduceLROnPlateau
 import argparse
 from pathlib import Path
 
@@ -55,7 +55,8 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
     # Set optimizer with mixed precision
     use_amp = True
     scaler = torch.amp.GradScaler(enabled=use_amp)
-    optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.05)
+    optimizer = optim.AdamW(model.parameters(), lr=5e-3)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=1, threshold=1e-3, min_lr=1e-7)
 
     # Load checkpoint if provided
     if checkpoint_path:
@@ -119,6 +120,9 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
                 outputs = model(images)
                 loss = criterion(outputs, labels)
                 val_total_loss += loss.item()
+        
+        # Step the scheduler
+        scheduler.step(val_total_loss / len(dataloader_val))
 
         # Save checkpoint if validation accuracy improves
         if epoch == 0 or val_total_loss < best_val_loss:
@@ -142,6 +146,8 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
     print('Finished Training HEAD\n')
     print("--- Starting Training FULL ---\n")
 
+    last_head_lr = optimizer.param_groups[0]['lr']
+
     torch.cuda.empty_cache()
 
     # 2. Training loop - Backbone
@@ -164,7 +170,7 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
     optimizer = optim.AdamW([
         {'params': model.module.features.parameters() if nn.DataParallel and torch.cuda.device_count() > 1 else model.features.parameters(), 'lr': 1e-6, 'weight_decay': 0.05},  # Very low LR for backbone
         {'params': model.module.norm.parameters() if nn.DataParallel and torch.cuda.device_count() > 1 else model.norm.parameters(), 'lr': 5e-6, 'weight_decay': 0.05},      # Slightly higher for norm
-        {'params': model.module.head.parameters() if nn.DataParallel and torch.cuda.device_count() > 1 else model.head.parameters(), 'lr': 1e-4, 'weight_decay': 0.01}       # Highest LR for head
+        {'params': model.module.head.parameters() if nn.DataParallel and torch.cuda.device_count() > 1 else model.head.parameters(), 'lr': last_head_lr, 'weight_decay': 0.01}       # Highest LR for head
     ])
 
     # Warmup for first 2 epochs, then cosine annealing
