@@ -3,6 +3,7 @@ import torch
 import os
 from torch.utils.data import Dataset
 from PIL import Image
+from torchvision import transforms
 
 def find_classes(df):
     # Get class name and sort them
@@ -50,6 +51,34 @@ class ImageFolderCustom(Dataset):
         image_path = os.path.join(os.getcwd(), './data/Images/', self.images[index])
         return Image.open(image_path)
 
+    def resize_and_pad(self, image, target_size=224):
+        """Resize image preserving aspect ratio, then pad to target size."""
+        # Get original dimensions
+        w, h = image.size
+
+        # Calculate scaling factor to fit within target_size while preserving aspect ratio
+        scale = min(target_size / w, target_size / h)
+
+        # New dimensions after scaling
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+
+        # Resize the image
+        image = image.resize((new_w, new_h), Image.BILINEAR)
+
+        # Calculate padding needed
+        pad_w = target_size - new_w
+        pad_h = target_size - new_h
+
+        # Distribute padding evenly on both sides
+        left = pad_w // 2
+        right = pad_w - left
+        top = pad_h // 2
+        bottom = pad_h - top
+
+        # Pad with white because its the dataset default background color
+        return transforms.functional.pad(image, (left, top, right, bottom), fill=255)
+
     def __len__(self):
         "Returns the total number of samples."
         return len(self.images)
@@ -57,6 +86,7 @@ class ImageFolderCustom(Dataset):
     def __getitem__(self, index: int):
         "Returns one sample of data, data and label (X, y)."
         img = self.load_image(index)
+        img = self.resize_and_pad(img, target_size=224)
         class_name  = self.classes[index]
         class_idx = self.classes_to_idx[class_name]
 
