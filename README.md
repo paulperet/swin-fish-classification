@@ -23,7 +23,7 @@ I choose to keep only the species that have 50 examples or more in the training 
 <img width="691" height="547" alt="image" src="https://github.com/user-attachments/assets/1b3a5165-04bc-46ba-9493-d6a9e28284aa" />
 
 ## Mitigating class imbalance
-The main goal of this project was to research and find techniques that would allows our vision transformer to learn on a massive imbalanced dataset.
+The main goal of this project was to research and find techniques that would allow our vision transformer to reach competitive accuracy across all classes on a massive imbalanced dataset.
 
 ### Data Preprocessing & Augmentation
 Following the recommendation of the original paper, I used a resizing technique that preserve the aspect ratio of the images so that the network can capture and discriminate each species on its proportions. It also come with the added benefit for our trained network to be used / fine tuned as a base model for another task such as trait segmentation, which is available with this dataset (Although the masks are only a subset of the entire fish dataset).
@@ -35,6 +35,7 @@ The issue with data that is imbalanced is that the network will learn on this di
 There are two main ways to compensate for that:
 - Using a weighted loss function
 - Using a weighted random sampler
+
 I have decided to go with the weighted cross-entropy loss for this project. The weights for my classes are calculated as:
 
 $$w_i = \frac{N}{n_i \cdot C}$$
