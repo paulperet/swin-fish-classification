@@ -13,7 +13,7 @@ from model import load_model
 from dataset import ImageFolderCustom
 from transforms import train_transform, test_transform
 
-def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_backbone=50, batch_size=256, num_workers=4, cutoff=50):
+def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_backbone=50, batch_size=256, num_workers=4):
     # Set device
     device = "cpu"
     if torch.cuda.is_available():
@@ -22,9 +22,9 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
         device = "mps"
 
     # Create datasets & dataloaders
-    train_classification = ImageFolderCustom("./data/classification_train.csv", transform=train_transform, cutoff=cutoff)
-    test_classification = ImageFolderCustom("./data/classification_test.csv", transform=test_transform, cutoff=cutoff)
-    val_classification = ImageFolderCustom("./data/classification_val.csv", transform=test_transform, cutoff=cutoff)
+    train_classification = ImageFolderCustom("./data/classification_train.csv", transform=train_transform)
+    test_classification = ImageFolderCustom("./data/classification_test.csv", transform=test_transform)
+    val_classification = ImageFolderCustom("./data/classification_val.csv", transform=test_transform)
 
     dataloader_train = DataLoader(train_classification, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=True)
     dataloader_test = DataLoader(test_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=True)
@@ -75,7 +75,6 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
     # Print training info
     print("--- Training Info ---\n")
     print(f"Device used: {device}")
-    print(f"Cutoff for classes: {cutoff}")
     print(f"Number of classes: {num_classes}")
     print(f"Number of training samples: {len(dataloader_train.dataset)}\n")
     print("--- Starting Training HEAD ---\n")
@@ -134,8 +133,7 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
                 "epoch": epoch,
                 "val_loss": val_total_loss,
                 "epochs_head": epochs_head,
-                "epochs_backbone": epochs_backbone,
-                "cutoff": cutoff
+                "epochs_backbone": epochs_backbone
             }
             torch.save(checkpoint, output_path)
 
@@ -240,8 +238,7 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
                 "epoch": epoch,
                 "val_loss": val_total_loss / len(dataloader_val),
                 "epochs_head": epochs_head,
-                "epochs_backbone": epochs_backbone,
-                "cutoff": cutoff
+                "epochs_backbone": epochs_backbone
             }
             torch.save(checkpoint, output_path)
 
@@ -289,13 +286,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--cutoff",
-        type=int,
-        default=50,
-        help="Cutoff for class representation. (default: 50)",
-    )
-
-    parser.add_argument(
         "--num-workers",
         type=int,
         default=4,
@@ -312,7 +302,6 @@ if __name__ == "__main__":
         output_path=args.output_file,
         epochs_head=args.epochs_head,
         epochs_backbone=args.epochs_backbone,
-        cutoff=args.cutoff,
         batch_size=args.batch_size,
         checkpoint_path=args.checkpoint_path,
         num_workers=args.num_workers,

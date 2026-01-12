@@ -24,22 +24,38 @@ def prediction_to_idx(probabilities):
     return best_prediction.item()
 
 class ImageFolderCustom(Dataset):
-    def __init__(self, targ_dir: str, transform=None, cutoff=50, upper_bound=None):
+    def __init__(self, targ_dir: str, transform=None, bin=None):
         
-        # Get classes >cutoff in train
+        # Get classes in train
         train_most_represented = pd.read_csv('./data/classification_train.csv', low_memory=False)
         counts = train_most_represented['standardized_species'].value_counts()
 
-        if upper_bound != None:
-            classes_most_represented = train_most_represented[(train_most_represented['standardized_species'].map(counts) >= cutoff) & (train_most_represented['standardized_species'].map(counts) <= upper_bound)]['standardized_species'].unique()
-        else:
-            classes_most_represented = train_most_represented[train_most_represented['standardized_species'].map(counts) >= cutoff]['standardized_species'].unique()
-
-        # Filter from these classes
+        # Load the target csv
         df = pd.read_csv(targ_dir, low_memory=False)
-        df = df[df['standardized_species'].isin(classes_most_represented)]
 
-        images, labels = df['filename'], df['standardized_species']
+        # Create four bins based on image counts
+        if bin != None:
+            ultra_rare = counts[counts < 10].index
+            minority = counts[(counts >= 10) & (counts < 100)].index
+            neutral = counts[(counts >= 100) & (counts < 500)].index
+            majority = counts[counts >= 500].index
+        
+        # Select bin if specified (to calculate accuracy per bin)
+        if bin == None:
+            images, labels = df['filename'], df['standardized_species']
+        elif bin == 'ultra_rare':
+            df_bin = df[df['standardized_species'].isin(ultra_rare)]
+            images, labels = df_bin['filename'], df_bin['standardized_species']
+        elif bin == 'minority':
+            df_bin = df[df['standardized_species'].isin(minority)]
+            images, labels = df_bin['filename'], df_bin['standardized_species']
+        elif bin == 'neutral':
+            df_bin = df[df['standardized_species'].isin(neutral)]
+            images, labels = df_bin['filename'], df_bin['standardized_species']
+        elif bin == 'majority':
+            df_bin = df[df['standardized_species'].isin(majority)]
+            images, labels = df_bin['filename'], df_bin['standardized_species']
+
         self.transform = transform
         self.classes = labels.to_list()
         self.images = images.to_list()
