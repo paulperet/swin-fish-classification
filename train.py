@@ -57,8 +57,8 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
     # Set optimizer with mixed precision
     use_amp = True
     scaler = torch.amp.GradScaler(enabled=use_amp)
-    optimizer = optim.AdamW(model.parameters(), lr=5e-3)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=1, threshold=1e-3, min_lr=1e-7)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-1, weight_decay=0.01)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, threshold=1e-3, min_lr=1e-7)
 
     # Load checkpoint if provided
     if checkpoint_path:
