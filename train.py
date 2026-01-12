@@ -52,7 +52,7 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
 
     # Use the weighted loss in CrossEntropyLoss
     #criterion = nn.CrossEntropyLoss(weight=class_weights)
-    criterion = FocalLoss(gamma=2, alpha=class_weights, task_type='multi-class', num_classes=num_classes)
+    criterion = FocalLoss(alpha=class_weights, gamma=2.0, reduction='mean')
 
     # Set optimizer with mixed precision
     use_amp = True

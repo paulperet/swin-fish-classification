@@ -1,135 +1,130 @@
+from typing import Optional, Sequence
+
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import Tensor
+from torch import nn
+from torch.nn import functional as F
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, gamma=2, alpha=None, reduction='mean', task_type='binary', num_classes=None):
-        """
-        Unified Focal Loss class for binary, multi-class, and multi-label classification tasks.
-        :param gamma: Focusing parameter, controls the strength of the modulating factor (1 - p_t)^gamma
-        :param alpha: Balancing factor, can be a scalar or a tensor for class-wise weights. If None, no class balancing is used.
-        :param reduction: Specifies the reduction method: 'none' | 'mean' | 'sum'
-        :param task_type: Specifies the type of task: 'binary', 'multi-class', or 'multi-label'
-        :param num_classes: Number of classes (only required for multi-class classification)
-        """
-        super(FocalLoss, self).__init__()
-        self.gamma = gamma
-        self.alpha = alpha
-        self.reduction = reduction
-        self.task_type = task_type
-        self.num_classes = num_classes
+    """ Focal Loss, as described in https://arxiv.org/abs/1708.02002.
 
-        # Handle alpha for class balancing in multi-class tasks
-        if task_type == 'multi-class' and alpha is not None and isinstance(alpha, (list, torch.Tensor)):
-            assert num_classes is not None, "num_classes must be specified for multi-class classification"
-            if isinstance(alpha, list):
-                self.alpha = torch.Tensor(alpha)
-            else:
-                self.alpha = alpha
+    It is essentially an enhancement to cross entropy loss and is
+    useful for classification tasks when there is a large class imbalance.
+    x is expected to contain raw, unnormalized scores for each class.
+    y is expected to contain class labels.
 
-    def forward(self, inputs, targets):
+    Shape:
+        - x: (batch_size, C) or (batch_size, C, d1, d2, ..., dK), K > 0.
+        - y: (batch_size,) or (batch_size, d1, d2, ..., dK), K > 0.
+    """
+
+    def __init__(self,
+                 alpha: Optional[Tensor] = None,
+                 gamma: float = 0.,
+                 reduction: str = 'mean',
+                 ignore_index: int = -100):
+        """Constructor.
+
+        Args:
+            alpha (Tensor, optional): Weights for each class. Defaults to None.
+            gamma (float, optional): A constant, as described in the paper.
+                Defaults to 0.
+            reduction (str, optional): 'mean', 'sum' or 'none'.
+                Defaults to 'mean'.
+            ignore_index (int, optional): class label to ignore.
+                Defaults to -100.
         """
-        Forward pass to compute the Focal Loss based on the specified task type.
-        :param inputs: Predictions (logits) from the model.
-                       Shape:
-                         - binary/multi-label: (batch_size, num_classes)
-                         - multi-class: (batch_size, num_classes)
-        :param targets: Ground truth labels.
-                        Shape:
-                         - binary: (batch_size,)
-                         - multi-label: (batch_size, num_classes)
-                         - multi-class: (batch_size,)
-        """
-        if self.task_type == 'binary':
-            return self.binary_focal_loss(inputs, targets)
-        elif self.task_type == 'multi-class':
-            return self.multi_class_focal_loss(inputs, targets)
-        elif self.task_type == 'multi-label':
-            return self.multi_label_focal_loss(inputs, targets)
-        else:
+        if reduction not in ('mean', 'sum', 'none'):
             raise ValueError(
-                f"Unsupported task_type '{self.task_type}'. Use 'binary', 'multi-class', or 'multi-label'.")
+                'Reduction must be one of: "mean", "sum", "none".')
 
-    def binary_focal_loss(self, inputs, targets):
-        """ Focal loss for binary classification. """
-        probs = torch.sigmoid(inputs)
-        targets = targets.float()
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.ignore_index = ignore_index
+        self.reduction = reduction
 
-        # Compute binary cross entropy
-        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
+        self.nll_loss = nn.NLLLoss(
+            weight=alpha, reduction='none', ignore_index=ignore_index)
 
-        # Compute focal weight
-        p_t = probs * targets + (1 - probs) * (1 - targets)
-        focal_weight = (1 - p_t) ** self.gamma
+    def __repr__(self):
+        arg_keys = ['alpha', 'gamma', 'ignore_index', 'reduction']
+        arg_vals = [self.__dict__[k] for k in arg_keys]
+        arg_strs = [f'{k}={v!r}' for k, v in zip(arg_keys, arg_vals)]
+        arg_str = ', '.join(arg_strs)
+        return f'{type(self).__name__}({arg_str})'
 
-        # Apply alpha if provided
-        if self.alpha is not None:
-            alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
-            bce_loss = alpha_t * bce_loss
+    def forward(self, x: Tensor, y: Tensor) -> Tensor:
+        if x.ndim > 2:
+            # (N, C, d1, d2, ..., dK) --> (N * d1 * ... * dK, C)
+            c = x.shape[1]
+            x = x.permute(0, *range(2, x.ndim), 1).reshape(-1, c)
+            # (N, d1, d2, ..., dK) --> (N * d1 * ... * dK,)
+            y = y.view(-1)
 
-        # Apply focal loss weighting
-        loss = focal_weight * bce_loss
+        unignored_mask = y != self.ignore_index
+        y = y[unignored_mask]
+        if len(y) == 0:
+            return torch.tensor(0.)
+        x = x[unignored_mask]
 
-        if self.reduction == 'mean':
-            return loss.mean()
-        elif self.reduction == 'sum':
-            return loss.sum()
-        return loss
+        # compute weighted cross entropy term: -alpha * log(pt)
+        # (alpha is already part of self.nll_loss)
+        log_p = F.log_softmax(x, dim=-1)
+        ce = self.nll_loss(log_p, y)
 
-    def multi_class_focal_loss(self, inputs, targets):
-        """ Focal loss for multi-class classification. """
-        if self.alpha is not None:
-            alpha = self.alpha.to(inputs.device)
+        # get true class column from each row
+        all_rows = torch.arange(len(x))
+        log_pt = log_p[all_rows, y]
 
-        # Convert logits to probabilities with softmax
-        probs = F.softmax(inputs, dim=1)
+        # compute focal term: (1 - pt)^gamma
+        pt = log_pt.exp()
+        focal_term = (1 - pt)**self.gamma
 
-        # One-hot encode the targets
-        targets_one_hot = F.one_hot(targets, num_classes=self.num_classes).float()
-
-        # Compute cross-entropy for each class
-        ce_loss = -targets_one_hot * torch.log(probs)
-
-        # Compute focal weight
-        p_t = torch.sum(probs * targets_one_hot, dim=1)  # p_t for each sample
-        focal_weight = (1 - p_t) ** self.gamma
-
-        # Apply alpha if provided (per-class weighting)
-        if self.alpha is not None:
-            alpha_t = alpha.gather(0, targets)
-            ce_loss = alpha_t.unsqueeze(1) * ce_loss
-
-        # Apply focal loss weight
-        loss = focal_weight.unsqueeze(1) * ce_loss
+        # the full loss: -alpha * ((1 - pt)^gamma) * log(pt)
+        loss = focal_term * ce
 
         if self.reduction == 'mean':
-            return loss.mean()
+            loss = loss.mean()
         elif self.reduction == 'sum':
-            return loss.sum()
+            loss = loss.sum()
+
         return loss
 
-    def multi_label_focal_loss(self, inputs, targets):
-        """ Focal loss for multi-label classification. """
-        probs = torch.sigmoid(inputs)
 
-        # Compute binary cross entropy
-        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
+def focal_loss(alpha: Optional[Sequence] = None,
+               gamma: float = 0.,
+               reduction: str = 'mean',
+               ignore_index: int = -100,
+               device='cpu',
+               dtype=torch.float32) -> FocalLoss:
+    """Factory function for FocalLoss.
 
-        # Compute focal weight
-        p_t = probs * targets + (1 - probs) * (1 - targets)
-        focal_weight = (1 - p_t) ** self.gamma
+    Args:
+        alpha (Sequence, optional): Weights for each class. Will be converted
+            to a Tensor if not None. Defaults to None.
+        gamma (float, optional): A constant, as described in the paper.
+            Defaults to 0.
+        reduction (str, optional): 'mean', 'sum' or 'none'.
+            Defaults to 'mean'.
+        ignore_index (int, optional): class label to ignore.
+            Defaults to -100.
+        device (str, optional): Device to move alpha to. Defaults to 'cpu'.
+        dtype (torch.dtype, optional): dtype to cast alpha to.
+            Defaults to torch.float32.
 
-        # Apply alpha if provided
-        if self.alpha is not None:
-            alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
-            bce_loss = alpha_t * bce_loss
+    Returns:
+        A FocalLoss object
+    """
+    if alpha is not None:
+        if not isinstance(alpha, Tensor):
+            alpha = torch.tensor(alpha)
+        alpha = alpha.to(device=device, dtype=dtype)
 
-        # Apply focal loss weight
-        loss = focal_weight * bce_loss
-
-        if self.reduction == 'mean':
-            return loss.mean()
-        elif self.reduction == 'sum':
-            return loss.sum()
-        return loss
+    fl = FocalLoss(
+        alpha=alpha,
+        gamma=gamma,
+        reduction=reduction,
+        ignore_index=ignore_index)
+    return fl
