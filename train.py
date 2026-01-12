@@ -7,6 +7,7 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR, ReduceLROnPlateau
 import argparse
 from pathlib import Path
+from focal_loss import FocalLoss
 
 # Import custom modules
 from model import load_model
@@ -50,7 +51,8 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
     class_weights = torch.tensor([i[1] for i in sorted(train_classification.classes_weights.items())], dtype=torch.float32, device=device)
 
     # Use the weighted loss in CrossEntropyLoss
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    #criterion = nn.CrossEntropyLoss(weight=class_weights)
+    criterion = FocalLoss(gamma=2, alpha=class_weights, task_type='multi-class', num_classes=num_classes)
 
     # Set optimizer with mixed precision
     use_amp = True
