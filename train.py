@@ -17,19 +17,21 @@ from transforms import train_transform, test_transform
 def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_backbone=50, batch_size=256, num_workers=4):
     # Set device
     device = "cpu"
+    pin_memory = True
     if torch.cuda.is_available():
         device = "cuda"
     elif torch.backends.mps.is_available():
         device = "mps"
+        pin_memory = False
 
     # Create datasets & dataloaders
     train_classification = ImageFolderCustom("./data/classification_train.csv", transform=train_transform)
     test_classification = ImageFolderCustom("./data/classification_test.csv", transform=test_transform)
     val_classification = ImageFolderCustom("./data/classification_val.csv", transform=test_transform)
 
-    dataloader_train = DataLoader(train_classification, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=True)
-    dataloader_test = DataLoader(test_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=True)
-    dataloader_val = DataLoader(val_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True, persistent_workers=True)
+    dataloader_train = DataLoader(train_classification, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
+    dataloader_test = DataLoader(test_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
+    dataloader_val = DataLoader(val_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
 
     # Load model
     model = load_model(train_classification.classes_to_idx)
@@ -49,6 +51,8 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
 
     # Define loss function
     class_weights = torch.tensor([i[1] for i in sorted(train_classification.classes_weights.items())], dtype=torch.float32, device=device)
+    class_weights = torch.log1p(class_weights)
+
     normalized_weights = class_weights / class_weights.sum() * len(class_weights)
 
     # Use the weighted loss in CrossEntropyLoss
