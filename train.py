@@ -49,15 +49,15 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
 
     # Define loss function
     class_weights = torch.tensor([i[1] for i in sorted(train_classification.classes_weights.items())], dtype=torch.float32, device=device)
+    normalized_weights = class_weights / class_weights.sum() * len(class_weights)
 
     # Use the weighted loss in CrossEntropyLoss
     #criterion = nn.CrossEntropyLoss(weight=class_weights)
-    criterion = FocalLoss(alpha=class_weights, gamma=2.0, reduction='mean')
-
+    criterion = FocalLoss(alpha=normalized_weights, gamma=2.0, reduction='mean').to(device)
     # Set optimizer with mixed precision
     use_amp = True
     scaler = torch.amp.GradScaler(enabled=use_amp)
-    optimizer = optim.AdamW(model.parameters(), lr=1e-1, weight_decay=0.01)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.01)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, threshold=1e-3, min_lr=1e-7)
 
     # Load checkpoint if provided
