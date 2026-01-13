@@ -14,7 +14,7 @@ from model import load_model
 from dataset import ImageFolderCustom
 from transforms import train_transform, test_transform
 
-def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_backbone=50, batch_size=256, num_workers=4):
+def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_backbone=50, batch_size=256, num_workers=4, persistent_workers=True):
     # Set device
     device = "cpu"
     pin_memory = True
@@ -29,9 +29,9 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
     test_classification = ImageFolderCustom("./data/classification_test.csv", transform=test_transform)
     val_classification = ImageFolderCustom("./data/classification_val.csv", transform=test_transform)
 
-    dataloader_train = DataLoader(train_classification, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
-    dataloader_test = DataLoader(test_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
-    dataloader_val = DataLoader(val_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
+    dataloader_train = DataLoader(train_classification, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=persistent_workers)
+    dataloader_test = DataLoader(test_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=persistent_workers)
+    dataloader_val = DataLoader(val_classification, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=persistent_workers)
 
     # Load model
     model = load_model(train_classification.classes_to_idx)
@@ -298,6 +298,13 @@ def parse_args():
         help="Number of workers for data loading. (default: 4)",
     )
 
+    parser.add_argument(
+        "--persistent-workers",
+        type=bool,
+        default=True,
+        help="Whether to use persistent workers for data loading. (default: True)",
+    )
+
     args = parser.parse_args()
     return args
 
@@ -311,4 +318,5 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         checkpoint_path=args.checkpoint_path,
         num_workers=args.num_workers,
+        persistent_workers=args.persistent_workers
     )
