@@ -58,7 +58,8 @@ Starting from an already trained model as many benefits especially for computer 
 ## Training
 I decided to compare two settings for focal loss. I used the normalized weights for alpha for my first model and left the default settings for the second. For the first 30 epochs I froze the model backbone and only updated the head weights. Then I unfroze all weights and train for 50 more epochs.
 
-<img width="6000" height="1800" alt="image" src="https://github.com/user-attachments/assets/298f802b-0c58-43ca-adc2-6730f5912430" />
+<img width="6000" height="1800" alt="image" src="https://github.com/user-attachments/assets/33d69a74-23a2-44a0-9f75-f829c4f11ee9" />
+
 
 ## Results
 
