@@ -62,7 +62,7 @@ def train(checkpoint_path=None, output_path="model.pt", epochs_head=50, epochs_b
 
     # Use the weighted loss in CrossEntropyLoss
     #criterion = nn.CrossEntropyLoss(weight=class_weights)
-    criterion = FocalLoss(alpha=normalized_weights, gamma=2.0, reduction='mean').to(device)
+    criterion = FocalLoss(alpha=None, gamma=2.0, reduction='mean').to(device)
     # Set optimizer with mixed precision
     use_amp = True
     scaler = torch.amp.GradScaler(enabled=use_amp)
