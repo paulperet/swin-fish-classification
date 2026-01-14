@@ -17,10 +17,10 @@ Two randomly sampled images from the dataset:
 <img width="1372" height="430" alt="image" src="https://github.com/user-attachments/assets/2e39ac5a-18c3-4f53-ae9a-27e5c14e0f8d" />
 
 ### Challenge
-The dataset suffers from a severe class imbalance. We can visualize it using the Lorenz curve (Gini values close to 0 signals equality while values close to 1 signals unequality). Only a small subset of these species contains a sufficient number of training examples to build an accurate model.
-I choose to keep only the species that have 50 examples or more in the training data which greatly reduces the number of classes down to 85.
+The dataset suffers from a severe class imbalance. As we can see around 10% of classes represent 80% samples. Only a small subset of these species contains a sufficient number of training examples to build an accurate model.
 
-<img width="691" height="547" alt="image" src="https://github.com/user-attachments/assets/1b3a5165-04bc-46ba-9493-d6a9e28284aa" />
+<img width="989" height="590" alt="image" src="https://github.com/user-attachments/assets/8aff98ad-d0ac-4287-975b-e6ca20843128" />
+
 
 ## Mitigating class imbalance
 The main goal of this project was to research and find techniques that would allow our vision transformer to reach competitive accuracy across all classes on a massive imbalanced dataset.
@@ -30,20 +30,50 @@ Following the recommendation of the original paper, I used a resizing technique 
 
 The augmentation used are random horizontal flips, random vertical flips, random rotations, color jittering and randomly adjusting the sharpness. They synthetically increase the number of unique examples, help the network avoid overfitting and assure that it truly learn each species features.
 
-### Weighted Cross Entropy Loss
+### Focal Loss
 The issue with data that is imbalanced is that the network will learn on this distribution and pay more attention to the majority classes, in some case leading to a great overall accuracy that does not represent the true quality of our classifier.
 There are two main ways to compensate for that:
 - Using a weighted loss function
 - Using a weighted random sampler
 
-I have decided to go with the weighted cross-entropy loss for this project. The weights for my classes are calculated as:
+Following some research I have found that focal loss was addressing the imbalance issue. I ran two experiments, one with the weights for my classes are calculated as:
 
 $$w_i = \frac{N}{n_i \cdot C}$$
 
 Where $w_i$ corresponds to the weight for class $i$, $N$ is the total number of samples, $n_i$ is the number of samples in class $i$, and $C$ is the total number of unique classes
 
+Then we apply log1p to smooth the range of the weights:
+
+$$w_{i} = \ln\(w_{i})$$
+
+Finally we normalize the weights:
+
+$$\hat{w}_{i} = \frac{w_{i}}{\sum_{j=1}^{C} w_{j}} \times C$$
+
+Where $w_i$ is the raw weight and $C$ is the number of unique species.
+
 ### Fine-Tuning a pretrained model
 Starting from an already trained model as many benefits especially for computer vision. Indeed, we can expect that the pretrained network will have learned how to distinguish common features found in nature for example. Fine tuning will make the learning way faster, usually having a good accuracy from the first epochs and being better than random initialization [1].
 
+## Training
+For the first 30 epochs I froze the model backbone and only updated the head weights. Then I unfreeze all weights and train for 50 more epochs.
+
+### 1. Training using alpha=normalized_weights
+
+<img width="3000" height="1800" alt="image" src="https://github.com/user-attachments/assets/09d6ce96-af31-42b6-8e5b-85714dfac413" />
+
+
+### 2. Training with alpha=None
+
+<img width="1600" height="960" alt="Code_Generated_Image (1)" src="https://github.com/user-attachments/assets/25bddf44-9b63-4071-9cb3-5d0a3f6e0b5d" />
+
+## Results
+
+Here are the results for general accuracy and accuracy per bin (ultra rare 2-10, minority 10-100, neutral 100-500 and majority 500+). As we can observe the default focal loss without weights handle the class imbalance itself better than the weighted version. I made different experiments to scale the weights but it always failed to surpass the default focal loss. It is probably due to the range of weight values which is too large.
+
+<img width="3200" height="960" alt="image" src="https://github.com/user-attachments/assets/f0429a76-6799-4d85-8245-5f89a24f9972" />
+
+
+## References
 [1] "All pre-training methods notably outperform random initialization. However, we
 observe a considerably larger improvement under class imbalanced scenarios, where models pretrained on larger datasets yield greater boosts in accuracy." Ravid Shwartz-Ziv, Micah Goldblum, Yucen Lily Li, C. Bayan Bruss, & Andrew Gordon Wilson. (2023). Simplifying Neural Network Training Under Class Imbalance.
