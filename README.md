@@ -56,16 +56,9 @@ Where $w_i$ is the raw weight and $C$ is the number of unique species.
 Starting from an already trained model as many benefits especially for computer vision. Indeed, we can expect that the pretrained network will have learned how to distinguish common features found in nature for example. Fine tuning will make the learning way faster, usually having a good accuracy from the first epochs and being better than random initialization [1].
 
 ## Training
-For the first 30 epochs I froze the model backbone and only updated the head weights. Then I unfreeze all weights and train for 50 more epochs.
+I decided to compare two settings for focal loss. I used the normalized weights for alpha for my first model and left the default settings for the second. For the first 30 epochs I froze the model backbone and only updated the head weights. Then I unfroze all weights and train for 50 more epochs.
 
-### 1. Training using alpha=normalized_weights
-
-<img width="3000" height="1800" alt="image" src="https://github.com/user-attachments/assets/09d6ce96-af31-42b6-8e5b-85714dfac413" />
-
-
-### 2. Training with alpha=None
-
-<img width="1600" height="960" alt="Code_Generated_Image (1)" src="https://github.com/user-attachments/assets/25bddf44-9b63-4071-9cb3-5d0a3f6e0b5d" />
+<img width="6000" height="1800" alt="image" src="https://github.com/user-attachments/assets/298f802b-0c58-43ca-adc2-6730f5912430" />
 
 ## Results
 
