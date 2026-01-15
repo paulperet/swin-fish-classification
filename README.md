@@ -6,6 +6,10 @@ majority classes can be represented as high as 1500 on the training set.
 
 [Link to the fish-vista Dataset](https://huggingface.co/datasets/imageomics/fish-vista)
 
+You can find the trained weights here :
+
+[Link to the huggingface model](https://huggingface.co/Aelyos/swin-fish-classification)
+
 ## Dataset
 
 ### Description
